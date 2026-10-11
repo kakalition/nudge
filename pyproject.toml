@@ -1,0 +1,57 @@
+[project]
+name = "nudge"
+version = "0.1.0"
+description = "Nudge — a general reminder agent built on agentkit (cron + one-off, SOUL-voiced nudges)"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Nudge" }]
+dependencies = [
+    "agentkit",
+    "pydantic-ai>=2.55.0,<3",
+    "sqlmodel>=0.0.22",
+    "typer>=0.15",
+    "python-dateutil>=2.9.0.post0",
+]
+
+[project.optional-dependencies]
+observability = ["opentelemetry-exporter-otlp-proto-http>=1.27"]
+observability-phoenix = ["arize-phoenix>=8"]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+nudge = "nudge.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+agentkit = { path = "../agentkit", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nudge"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
