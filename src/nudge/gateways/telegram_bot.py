@@ -15,6 +15,7 @@ from agentkit.config import AgentSettings, build_model
 from agentkit.gateways.telegram import (  # noqa: F401  (re-exported for convenience)
     ApprovalBroker,
     react_seen,
+    run_turn,
     send_markdown,
 )
 from agentkit.gateways.telegram import is_allowed as _is_allowed_ids
@@ -70,8 +71,10 @@ async def handle_message(
         runner = ChatRunner(deps, agent=orchestrator_agent, conversation_id=conversation_id)
         try:
             result = await runner.send(text)
-        except Exception as exc:  # pragma: no cover - defensive
-            await bot.send_message(chat_id, f"Something went wrong: {type(exc).__name__}")
+        except Exception:  # pragma: no cover - defensive
+            await bot.send_message(
+                chat_id, "Sorry — something went wrong on my side. Please try again."
+            )
             return
     await send_markdown(bot, chat_id, result.output)
 
@@ -85,19 +88,33 @@ def register_handlers(dp: Dispatcher, runtime: Runtime, broker: ApprovalBroker) 
         if not is_allowed(settings, chat_id):
             await message.answer("This bot is private.")
             return
-        await react_seen(message)
+        await react_seen(message, enabled=settings.telegram_seen_reaction)
         if message.text and message.text.strip().startswith("/start"):
             await message.answer(DEFAULT_GREETING)
             return
-        if message.bot is None:
+        bot = message.bot
+        if bot is None:
             return
-        await handle_message(
-            runtime=runtime,
-            broker=broker,
-            bot=message.bot,
+        await run_turn(
+            lambda: handle_message(
+                runtime=runtime,
+                broker=broker,
+                bot=bot,
+                chat_id=chat_id,
+                text=message.text or "",
+            ),
+            bot=bot,
             chat_id=chat_id,
-            text=message.text or "",
+            live_status=settings.telegram_live_status,
+            typing=settings.telegram_typing_action,
+            phrase_interval_s=settings.telegram_status_interval_s,
         )
+
+    @dp.message(~F.text)
+    async def _on_other(message: Message) -> None:
+        if not is_allowed(settings, message.chat.id):
+            return
+        await message.answer("I can only handle text messages for now.")
 
     @dp.callback_query(F.data.startswith("approve:"))
     async def _on_approve(callback: CallbackQuery) -> None:
@@ -125,7 +142,10 @@ async def _run_bot(settings: Settings) -> None:
     dp = Dispatcher()
     register_handlers(dp, runtime, broker)
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+    # run_all() runs each service on a worker thread; aiogram's signal handling
+    # (loop.add_signal_handler) only works on the main thread, so leave signals
+    # to the supervisor.
+    await dp.start_polling(bot, handle_signals=False)
 
 
 def run_bot(settings: Settings) -> None:

@@ -72,3 +72,11 @@ def test_up_with_nothing_enabled(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert "nothing to run" in result.output
     get_settings.cache_clear()
+
+
+def test_mcp_server_builds(settings, runtime):
+    """Regress the NameError when FastMCP resolved the tool return annotations."""
+    from nudge.cli import _build_mcp_server
+
+    server = _build_mcp_server(settings, runtime)
+    assert server is not None

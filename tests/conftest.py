@@ -29,3 +29,17 @@ def _scheduler_home(runtime: Runtime):
     scheduler.configure(runtime.settings)
     yield
     scheduler._runtime = None
+
+
+@pytest.fixture(autouse=True)
+def _isolate_env(monkeypatch):
+    """Keep the developer's real .env (token, web UI) out of the test run.
+
+    Env vars take precedence over the ``.env`` file in pydantic-settings, so a
+    real ``TELEGRAM_BOT_TOKEN`` can never make a test start a live bot.
+    """
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
+    monkeypatch.setenv("OBSERVABILITY", "off")
+    monkeypatch.setenv("WEBUI_ENABLED", "false")
+    yield

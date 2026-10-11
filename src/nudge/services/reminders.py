@@ -8,7 +8,7 @@ Schedules page and the durable tick both work unchanged.
 from __future__ import annotations
 
 import re
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
 from agentkit import scheduler
@@ -21,6 +21,41 @@ NUDGE_TASK = "nudge"
 
 _RELATIVE_DAYS = {"today": 0, "tonight": 0, "tomorrow": 1, "tmr": 1, "yesterday": -1}
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+# Relative durations, e.g. "in 5 minutes", "5 mins from now", "in 2 hours".
+_RELATIVE_SECONDS = {
+    "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+    "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
+    "h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
+    "d": 86400, "day": 86400, "days": 86400,
+    "w": 604800, "week": 604800, "weeks": 604800,
+}
+_RELATIVE_RE = re.compile(r"(?:in\s+)?(\d+)\s*([a-z]+)")
+
+
+def _parse_relative(raw: str, now: datetime) -> datetime | None:
+    """Resolve "in 5 minutes" / "5 mins from now" / "2 mins" relative to ``now``."""
+    lowered = raw.lower()
+    match = _RELATIVE_RE.search(lowered)
+    if match is None:
+        return None
+    seconds = _RELATIVE_SECONDS.get(match.group(2))
+    if seconds is None:
+        return None
+    return (now + timedelta(seconds=int(match.group(1)) * seconds)).replace(
+        second=0, microsecond=0
+    )
+
+
+def _as_utc(moment: datetime) -> datetime:
+    """Return ``moment`` as an aware UTC datetime (naive input is taken as local).
+
+    agentkit's scheduler compares ``scheduled_jobs.schedule`` against UTC, so
+    one-off reminder times must be stored UTC-aware or they fire hours off.
+    """
+    if moment.tzinfo is None:
+        moment = moment.astimezone()  # attach the local timezone
+    return moment.astimezone(UTC)
 
 
 def _configure(settings: Settings) -> None:
@@ -44,24 +79,33 @@ def derive_name(text: str, existing: set[str]) -> str:
 
 
 def parse_when(value: str, *, now: datetime | None = None) -> datetime:
-    """Resolve an ISO datetime first, then light natural language ("tomorrow 09:00")."""
+    """Resolve a time the user meant (local) and return it as aware UTC.
+
+    Understands an ISO datetime, a light natural phrase ("tomorrow 09:00"), and
+    relative durations ("in 5 minutes", "5 mins from now", "2 mins").
+    """
     raw = (value or "").strip()
     if not raw:
         raise ValueError("a datetime is required")
     try:
-        return datetime.fromisoformat(raw)
+        return _as_utc(datetime.fromisoformat(raw))
     except ValueError:
         pass
-    now = now or datetime.now()
+    now = (now or datetime.now()).astimezone()
+    relative = _parse_relative(raw, now)
+    if relative is not None:
+        return _as_utc(relative)
     tokens = raw.split()
     if tokens and tokens[0].lower() in _RELATIVE_DAYS:
         target = (now + timedelta(days=_RELATIVE_DAYS[tokens[0].lower()])).date()
         remainder = " ".join(tokens[1:]).strip(" ,")
         if remainder:
             parsed = date_parser.parse(remainder, default=now)
-            return datetime.combine(target, parsed.time()).replace(second=0, microsecond=0)
-        return datetime.combine(target, time(9, 0))
-    return date_parser.parse(raw, default=now).replace(second=0, microsecond=0)
+            moment = datetime.combine(target, parsed.time()).replace(second=0, microsecond=0)
+        else:
+            moment = datetime.combine(target, time(9, 0))
+        return _as_utc(moment)
+    return _as_utc(date_parser.parse(raw, default=now).replace(second=0, microsecond=0))
 
 
 def _record(job: dict[str, Any], settings: Settings) -> ReminderRecord:
@@ -106,7 +150,7 @@ def add_reminder(
         scheduler.schedule_cron(job_name, cron, NUDGE_TASK, args=args, enabled=enabled)
     else:
         moment = at if isinstance(at, datetime) else parse_when(str(at))
-        scheduler.schedule_once(job_name, moment, NUDGE_TASK, args=args)
+        scheduler.schedule_once(job_name, _as_utc(moment), NUDGE_TASK, args=args)
         if not enabled:
             scheduler.set_enabled(job_name, False)
 

@@ -9,6 +9,7 @@ from agentkit import build_deps, build_model, build_runtime, repositories
 from agentkit.session import ChatRunner
 
 from nudge import __version__
+from nudge.agents.schemas import ReminderRecord
 from nudge.config import Settings, get_settings
 
 # Importing the service registers the durable "nudge" scheduler task before any
@@ -314,10 +315,15 @@ def _serve_a2a(settings: Settings, runtime) -> None:
 
 
 def _serve_mcp(settings: Settings, runtime, *, transport: str = "streamable-http") -> None:
+    server = _build_mcp_server(settings, runtime)
     from agentkit.mcp.server import serve_mcp
-    from fastmcp import FastMCP
 
-    from nudge.agents.schemas import ReminderRecord
+    serve_mcp(server, transport=transport, host=settings.mcp_host, port=settings.mcp_port)
+
+
+def _build_mcp_server(settings: Settings, runtime):
+    """Build the FastMCP server (kept separate so it can be built in tests)."""
+    from fastmcp import FastMCP
 
     server = FastMCP(name="nudge", instructions="A general reminder agent (cron + one-off).")
 
@@ -353,7 +359,7 @@ def _serve_mcp(settings: Settings, runtime, *, transport: str = "streamable-http
         """Read the delivered nudges from the outbox."""
         return nudge_svc.read_outbox(settings=settings, limit=limit)
 
-    serve_mcp(server, transport=transport, host=settings.mcp_host, port=settings.mcp_port)
+    return server
 
 
 def main() -> None:

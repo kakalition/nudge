@@ -59,3 +59,38 @@ async def test_reminder_tool_schedules_job(runtime, repos, settings):
     assert [record.name for record in rows] == ["walk-the-dog"]
     assert rows[0].schedule == "0 7 * * *"
     assert rows[0].text == "walk the dog"
+
+
+async def test_add_reminder_without_time_reports_error(runtime, repos, settings):
+    def model_fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if _has_tool_return(messages):
+            return ModelResponse(parts=[TextPart("I need a time for that.")])
+        return ModelResponse(parts=[ToolCallPart("add_reminder", {"text": "call mom"})])
+
+    deps = build_deps(runtime, repos, model=FunctionModel(model_fn))
+    result = await reminder_agent.run("remind me to call mom", deps=deps, model=deps.model)
+
+    assert result.output == "I need a time for that."
+    assert reminder_svc.list_reminders(settings=settings) == []
+
+
+async def test_orchestrator_still_replies_when_specialist_fails(runtime, repos, monkeypatch):
+    from nudge.agents import orchestrator as orch
+
+    async def boom(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("specialist down")
+
+    monkeypatch.setattr(orch.reminder_agent, "run", boom)
+
+    def model_fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        if _has_tool_return(messages):
+            return ModelResponse(parts=[TextPart("handled")])
+        return ModelResponse(
+            parts=[ToolCallPart("handle_reminders", {"request": "remind me in 5 minutes"})]
+        )
+
+    deps = build_deps(runtime, repos, model=FunctionModel(model_fn))
+    result = await orch.orchestrator_agent.run(
+        "remind me in 5 minutes", deps=deps, model=deps.model
+    )
+    assert result.output == "handled"

@@ -145,7 +145,7 @@ Nudge reads standard agentkit variables plus its own. Copy `.env.example` to
 | `OWNER_ID` / `OWNER_NAME` | `owner` / `Owner` | The owner |
 | `AGENTKIT_HOME` | `~/.agentkit` | Workspace root (`~/.agentkit/nudge`) |
 | `AGENT_HOME` | `~/.agentkit/nudge` | Explicit home override |
-| `NUDGE_DEFAULT_TARGET` | `local` | `local` \| `telegram` \| `both` |
+| `NUDGE_DEFAULT_TARGET` | `both` | `local` \| `telegram` \| `both` |
 | `WEBUI_ENABLED` / `WEBUI_HOST` / `WEBUI_PORT` | `true` / `127.0.0.1` / `8787` | Operator web UI |
 | `OBSERVABILITY` | `phoenix` | `phoenix` (local UI) \| `console` \| `otlp` \| `off` |
 | `TELEGRAM_BOT_TOKEN` | – | Enables Telegram delivery / the bot |
@@ -174,7 +174,9 @@ Nudge reads standard agentkit variables plus its own. Copy `.env.example` to
 model). `preview`, `fire` and `chat` use the model.
 
 `--at` accepts an ISO datetime or light natural language (`tomorrow 09:00`,
-`today 18:30`); `--cron` takes a raw cron expression.
+`today 18:30`, `in 5 minutes`, `5 mins from now`); `--cron` takes a raw cron
+expression. The chat agents pass timing straight through, so the same phrases
+work in conversation.
 
 ## Web UI
 
@@ -240,10 +242,14 @@ fires exactly once even across restarts.
 template, still writes the outbox, and audits `nudge.compose_failed` — a reminder
 is never lost to a model error.
 
-**Where does it send nudges?** To the local outbox always; to Telegram when
-`TELEGRAM_BOT_TOKEN` is set and the target is `telegram`/`both`. With no dedicated
-chat id configured, the **first** `TELEGRAM_ALLOWED_CHAT_IDS` entry is the owner
-chat.
+**Where does it send nudges?** To the local outbox always, and to Telegram when
+`TELEGRAM_BOT_TOKEN` is set. The default target is `both`, so a chat user gets the
+push and the outbox; with no token configured it is outbox-only. The **first**
+`TELEGRAM_ALLOWED_CHAT_IDS` entry is the owner chat.
+
+**What timezone are reminders?** `--at` phrases and chat times are resolved in
+your **local** timezone and stored as UTC, so "in 2 minutes" fires in 2 minutes.
+`--cron` expressions are matched against the clock in **UTC**.
 
 **Can I reuse a name?** Yes — `--name` upserts (updates) that reminder. Without
 `--name`, the name is a slug of the text with a numeric suffix if taken.
