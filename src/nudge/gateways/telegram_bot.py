@@ -14,6 +14,7 @@ from typing import Any
 from agentkit.config import AgentSettings, build_model
 from agentkit.gateways.telegram import (  # noqa: F401  (re-exported for convenience)
     ApprovalBroker,
+    react_seen,
     send_markdown,
 )
 from agentkit.gateways.telegram import is_allowed as _is_allowed_ids
@@ -84,6 +85,7 @@ def register_handlers(dp: Dispatcher, runtime: Runtime, broker: ApprovalBroker) 
         if not is_allowed(settings, chat_id):
             await message.answer("This bot is private.")
             return
+        await react_seen(message)
         if message.text and message.text.strip().startswith("/start"):
             await message.answer(DEFAULT_GREETING)
             return
