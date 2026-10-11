@@ -31,6 +31,23 @@ def test_orchestrator_registers_reminder_specialist():
     assert "handle_reminders" in _tool_names(orchestrator_agent)
 
 
+async def test_orchestrator_persona_comes_from_soul(runtime, repos, settings):
+    from nudge.soul import load_soul
+
+    captured: dict[str, object] = {}
+
+    def model_fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        captured["instructions"] = info.instructions
+        return ModelResponse(parts=[TextPart("ok")])
+
+    deps = build_deps(runtime, repos, model=FunctionModel(model_fn))
+    await orchestrator_agent.run("hi", deps=deps, model=deps.model)
+
+    text = str(captured["instructions"])
+    assert load_soul(settings)[:20] in text  # persona is read from SOUL every run
+    assert "You are Nudge" not in text  # no hardcoded identity
+
+
 def test_reminder_agent_tools():
     assert _tool_names(reminder_agent) >= {
         "add_reminder",

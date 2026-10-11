@@ -16,10 +16,12 @@ def _model(text: str) -> FunctionModel:
 
 
 def test_nudge_agent_composes_soul_instructions(settings):
+    from nudge.soul import load_soul
+
     agent = build_nudge_agent(settings)
     instructions = str(agent._instructions)
-    assert "Nudge" in instructions
-    assert "reminder" in instructions.lower()
+    assert load_soul(settings).splitlines()[0] in instructions  # persona from SOUL
+    assert "vary phrasing" in instructions  # plus the nudge brief
 
 
 def test_compose_nudge_uses_model(settings):

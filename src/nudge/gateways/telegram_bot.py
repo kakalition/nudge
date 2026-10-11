@@ -89,8 +89,14 @@ def register_handlers(dp: Dispatcher, runtime: Runtime, broker: ApprovalBroker) 
             await message.answer("This bot is private.")
             return
         await react_seen(message, enabled=settings.telegram_seen_reaction)
-        if message.text and message.text.strip().startswith("/start"):
-            await message.answer(DEFAULT_GREETING)
+        command = (message.text or "").strip()
+        if command.startswith("/"):
+            if command.startswith("/start"):
+                await message.answer(DEFAULT_GREETING)
+            else:
+                await message.answer(
+                    "I only use /start. Just tell me what to remind you about and when."
+                )
             return
         bot = message.bot
         if bot is None:
@@ -142,6 +148,9 @@ async def _run_bot(settings: Settings) -> None:
     dp = Dispatcher()
     register_handlers(dp, runtime, broker)
     await bot.delete_webhook(drop_pending_updates=True)
+    # Clear any command menu left over from a previous app on this bot token.
+    with contextlib.suppress(Exception):
+        await bot.delete_my_commands()
     # run_all() runs each service on a worker thread; aiogram's signal handling
     # (loop.add_signal_handler) only works on the main thread, so leave signals
     # to the supervisor.

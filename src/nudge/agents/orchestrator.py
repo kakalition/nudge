@@ -8,8 +8,7 @@ without an answer.
 from __future__ import annotations
 
 from agentkit.config import AgentSettings, model_settings, usage_limits
-from agentkit.orchestrator import Orchestrator
-from pydantic_ai import RunContext
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.usage import UsageLimits
 
 from nudge.agents.deps import Deps
@@ -21,13 +20,14 @@ from nudge.soul import compose_instructions, load_soul
 # below) instead of stalling a whole chat turn.
 _DEFAULT_REQUEST_LIMIT = 6
 
-_orchestrator = Orchestrator(
+# Instructions are composed per run from the live SOUL, so editing SOUL.md
+# changes the agent's name/voice without a restart.
+orchestrator_agent: Agent[Deps, str] = Agent(
     name="nudge",
-    instructions=compose_instructions(load_soul(), ORCHESTRATOR),
     deps_type=Deps,
+    output_type=str,
+    instructions=lambda ctx: compose_instructions(load_soul(ctx.deps.settings), ORCHESTRATOR),
 )
-
-orchestrator_agent = _orchestrator.agent
 
 
 def _specialist_limits(settings: AgentSettings) -> UsageLimits:

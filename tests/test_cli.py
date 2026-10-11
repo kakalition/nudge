@@ -62,7 +62,8 @@ def test_soul_command(tmp_path, monkeypatch):
     runner = _prepare(tmp_path, monkeypatch)
     result = runner.invoke(app, ["soul"])
     assert result.exit_code == 0
-    assert "Nudge" in result.output
+    assert "SOUL.md" in result.output
+    assert "reminder companion" in result.output
     get_settings.cache_clear()
 
 
